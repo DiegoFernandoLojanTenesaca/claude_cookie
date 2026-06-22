@@ -178,14 +178,15 @@ deja las 3 más nuevas.
 
 ## App móvil (PWA)
 
-`web/` es una mini app (HTML estático, sin backend) para tener el cookie a mano en el
+`docs/` es una mini app (HTML estático, sin backend) para tener el cookie a mano en el
 móvil. **Pegas el JSON** del backup (lo abres desde Drive en el teléfono), y te da
 botón grande de **Copiar sessionKey** / **Copiar JSON completo**, muestra cuándo
 caduca, lo recuerda en el dispositivo (`localStorage`) y funciona offline. Se instala
 como icono ("Añadir a pantalla de inicio").
 
-Para publicarla: activa **GitHub Pages** sobre la carpeta `/web` (Settings → Pages), o
-ábrela local. No expone nada: el `sessionKey` nunca sale del teléfono.
+Para publicarla: **Settings → Pages → Deploy from a branch → `main` / `/docs`**. Te da
+una URL `https://<usuario>.github.io/claude_cookie/` que abres en el móvil. No expone
+nada: el `sessionKey` nunca sale del teléfono.
 
 > Decisión de diseño: que el móvil *jale solo* el cookie exigiría una URL pública con
 > tu sesión = acceso total a la cuenta. Por eso es **pegar-y-copiar**, no auto-fetch.
@@ -210,7 +211,7 @@ Drive de esa PC. El Sheet hace lo mismo con sus filas.
 | `install.sh` | Instalador Linux (systemd) y macOS (launchd). |
 | `install.ps1` | Instalador Windows (Task Scheduler + acceso directo). |
 | `sheet.gs` | Apps Script para el Google Sheet opcional. |
-| `web/` | Mini PWA para el móvil (pegar-y-copiar, offline, instalable). |
+| `docs/` | Mini PWA para el móvil (pegar-y-copiar, offline, instalable; GitHub Pages la sirve). |
 | `out/` | Backups locales (ignorado por git). |
 
 Config (no versionada): `config.json` en `~/.config/claude-cookie-backup/` (o

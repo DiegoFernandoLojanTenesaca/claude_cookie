@@ -117,6 +117,7 @@ Exec=$PY $DIR/gui.py
 Icon=$DIR/assets/logo.svg
 Terminal=false
 Categories=Utility;
+StartupWMClass=ClaudeCookieBackup
 EOF
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
   systemctl --user daemon-reload

@@ -75,6 +75,11 @@ class App:
         self.cfg = load_cfg()
         root.title("Claude · Cookie Backup")
         root.resizable(False, False)
+        try:                              # icono de la ventana (PNG; Tk no lee SVG)
+            self._icon = tk.PhotoImage(file=os.path.join(DIR, "assets", "logo.png"))
+            root.iconphoto(True, self._icon)
+        except Exception:
+            pass
         frm = ttk.Frame(root, padding=16)
         frm.grid(sticky="nwes")
 
@@ -173,6 +178,6 @@ class App:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    root = tk.Tk(className="ClaudeCookieBackup")   # WM_CLASS para que el SO mapee el icono
     App(root)
     root.mainloop()

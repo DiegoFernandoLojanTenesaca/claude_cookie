@@ -1,5 +1,5 @@
 // Service worker mínimo: cachea la app para que funcione offline e instalable.
-const CACHE = "cc-v1";
+const CACHE = "cc-v2";
 const ASSETS = ["./", "index.html", "manifest.webmanifest", "icon.svg"];
 
 self.addEventListener("install", e =>

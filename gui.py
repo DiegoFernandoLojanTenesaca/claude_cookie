@@ -1,107 +1,155 @@
 #!/usr/bin/env python3
-"""Interfaz minima para claude-cookie-backup (Tkinter, sin dependencias).
-Extraer a demanda, copiar el cookie para pegarlo en otra PC, cambiar cada
-cuantos dias corre y abrir la carpeta."""
-import os, re, glob, json, subprocess
+"""Interfaz multiplataforma para claude-cookie-backup (Tkinter/ttk, sin deps).
+Extraer a demanda, copiar el cookie, elegir navegador e intervalo, abrir carpeta.
+Funciona en Linux / Windows / macOS."""
+import os, sys, glob, json, platform, subprocess
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-SERVICE = os.path.expanduser("~/.config/systemd/user/claude-cookies.service")
-TIMER = os.path.expanduser("~/.config/systemd/user/claude-cookies.timer")
+PY = sys.executable
+BROWSERS = ["auto", "chrome", "brave", "chromium", "edge", "opera", "vivaldi", "firefox"]
+DAYS = ["10", "15", "20", "30"]
+KEEPS = ["3", "5", "7", "10"]
 
 
-def out_folder():
-    """Lee DRIVE_FOLDER del service; si no, usa out/ del proyecto."""
+def config_dir():
+    if os.name == "nt":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    else:
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    return os.path.join(base, "claude-cookie-backup")
+
+
+CFG_PATH = os.path.join(config_dir(), "config.json")
+
+
+def load_cfg():
+    cfg = {"drive_folder": os.path.join(DIR, "out"), "rclone_remote": "",
+           "sheet_webhook": "", "keep": 3, "days": 15, "browser": ""}
     try:
-        m = re.search(r"DRIVE_FOLDER=(.+)", open(SERVICE).read())
-        if m and m.group(1).strip():
-            return m.group(1).strip()
-    except FileNotFoundError:
+        with open(CFG_PATH) as f:
+            cfg.update(json.load(f))
+    except (OSError, ValueError):
         pass
-    return os.path.join(DIR, "out")
+    return cfg
 
 
-def latest():
-    """(ruta, lista_cookies) del backup mas nuevo, o (None, None)."""
-    files = sorted(glob.glob(os.path.join(out_folder(), "claude-cookies-*.json")))
+def save_cfg(cfg):
+    os.makedirs(config_dir(), exist_ok=True)
+    with open(CFG_PATH, "w") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def out_folder(cfg):
+    return cfg.get("drive_folder") or os.path.join(DIR, "out")
+
+
+def latest(cfg):
+    files = sorted(glob.glob(os.path.join(out_folder(cfg), "claude-cookies-*.json")))
     if not files:
         return None, None
-    return files[-1], json.load(open(files[-1]))
+    try:
+        return files[-1], json.load(open(files[-1]))
+    except (OSError, ValueError):
+        return files[-1], None
 
 
 def session_key(cookies):
-    return next((c["value"] for c in cookies if c["name"] == "sessionKey"), None)
+    return next((c["value"] for c in (cookies or []) if c["name"] == "sessionKey"), None)
 
 
-def next_run():
-    try:
-        out = subprocess.check_output(
-            ["systemctl", "--user", "list-timers", "claude-cookies.timer",
-             "--no-pager"], text=True)
-        for line in out.splitlines():
-            if "claude-cookies" in line:
-                return "en " + line.split()[3] + " " + line.split()[4]
-    except Exception:
-        pass
-    return "?"
+def open_path(p):
+    os.makedirs(p, exist_ok=True)
+    if platform.system() == "Windows":
+        os.startfile(p)                      # noqa: B606
+    elif platform.system() == "Darwin":
+        subprocess.Popen(["open", p])
+    else:
+        subprocess.Popen(["xdg-open", p])
 
 
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("Claude · backup de cookies")
+        self.cfg = load_cfg()
+        root.title("Claude · Cookie Backup")
         root.resizable(False, False)
-        pad = {"padx": 12, "pady": 6}
+        frm = ttk.Frame(root, padding=16)
+        frm.grid(sticky="nwes")
 
-        self.status = tk.Label(root, justify="left", anchor="w", font=("", 11))
-        self.status.grid(row=0, column=0, columnspan=2, sticky="we", **pad)
+        ttk.Label(frm, text="Claude · Cookie Backup",
+                  font=("", 15, "bold")).grid(row=0, column=0, columnspan=2, sticky="w")
+        self.status = ttk.Label(frm, justify="left", foreground="#444")
+        self.status.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 12))
 
-        tk.Button(root, text="⟳  Extraer ahora", command=self.extract,
-                  height=2).grid(row=1, column=0, columnspan=2, sticky="we", **pad)
+        ttk.Button(frm, text="⟳  Extraer ahora", command=self.extract
+                   ).grid(row=2, column=0, columnspan=2, sticky="we", ipady=6)
 
-        tk.Button(root, text="Copiar sessionKey", command=self.copy_sk
-                  ).grid(row=2, column=0, sticky="we", **pad)
-        tk.Button(root, text="Copiar JSON completo", command=self.copy_json
-                  ).grid(row=2, column=1, sticky="we", **pad)
+        cp = ttk.Frame(frm); cp.grid(row=3, column=0, columnspan=2, sticky="we", pady=8)
+        cp.columnconfigure((0, 1), weight=1)
+        ttk.Button(cp, text="Copiar sessionKey", command=self.copy_sk
+                   ).grid(row=0, column=0, sticky="we", padx=(0, 4))
+        ttk.Button(cp, text="Copiar JSON completo", command=self.copy_json
+                   ).grid(row=0, column=1, sticky="we", padx=(4, 0))
+        ttk.Button(frm, text="Abrir carpeta de backups", command=self.open_folder
+                   ).grid(row=4, column=0, columnspan=2, sticky="we")
 
-        tk.Button(root, text="Abrir carpeta", command=self.open_folder
-                  ).grid(row=3, column=0, sticky="we", **pad)
-        # selector de intervalo
-        box = tk.Frame(root); box.grid(row=3, column=1, sticky="we", **pad)
-        tk.Label(box, text="cada").pack(side="left")
-        self.days = tk.StringVar(value=self.current_days())
-        tk.OptionMenu(box, self.days, "10", "15", "20", "30").pack(side="left")
-        tk.Label(box, text="días").pack(side="left")
-        tk.Button(box, text="Aplicar", command=self.apply_days).pack(side="left", padx=4)
+        ttk.Separator(frm).grid(row=5, column=0, columnspan=2, sticky="we", pady=12)
 
+        st = ttk.Frame(frm); st.grid(row=6, column=0, columnspan=2, sticky="we")
+        ttk.Label(st, text="Navegador:").grid(row=0, column=0, sticky="w", pady=3)
+        self.browser = tk.StringVar(value=self.cfg.get("browser") or "auto")
+        ttk.OptionMenu(st, self.browser, self.browser.get(), *BROWSERS,
+                       command=lambda _: self.save()).grid(row=0, column=1, sticky="w", padx=6)
+        ttk.Label(st, text="Cada:").grid(row=1, column=0, sticky="w", pady=3)
+        self.days = tk.StringVar(value=str(self.cfg.get("days", 15)))
+        ttk.OptionMenu(st, self.days, self.days.get(), *DAYS,
+                       command=lambda _: self.save()).grid(row=1, column=1, sticky="w", padx=6)
+        ttk.Label(st, text="días").grid(row=1, column=2, sticky="w")
+        ttk.Label(st, text="Conservar:").grid(row=2, column=0, sticky="w", pady=3)
+        self.keep = tk.StringVar(value=str(self.cfg.get("keep", 3)))
+        ttk.OptionMenu(st, self.keep, self.keep.get(), *KEEPS,
+                       command=lambda _: self.save()).grid(row=2, column=1, sticky="w", padx=6)
+        ttk.Label(st, text="backups").grid(row=2, column=2, sticky="w")
+
+        self.log = ttk.Label(frm, foreground="#888")
+        self.log.grid(row=7, column=0, columnspan=2, sticky="w", pady=(12, 0))
         self.refresh()
 
-    def current_days(self):
-        try:
-            m = re.search(r"OnUnitActiveSec=(\d+)d", open(TIMER).read())
-            return m.group(1) if m else "10"
-        except FileNotFoundError:
-            return "10"
+    # --- acciones ---
+    def save(self):
+        b = self.browser.get()
+        self.cfg["browser"] = "" if b == "auto" else b
+        self.cfg["days"] = int(self.days.get())
+        self.cfg["keep"] = int(self.keep.get())
+        save_cfg(self.cfg)
+        self.log.config(text="Ajustes guardados.")
+        self.refresh()
 
     def refresh(self):
-        path, cookies = latest()
+        path, cookies = latest(self.cfg)
         if path:
-            fecha = os.path.basename(path).replace("claude-cookies-", "").replace(".json", "")
+            import datetime
+            fecha = os.path.basename(path)[len("claude-cookies-"):-len(".json")]
             sk = session_key(cookies)
-            estado = (f"Última extracción: {fecha}   ({len(cookies)} cookies)\n"
-                      f"sessionKey: {'OK' if sk else 'FALTA'}\n"
-                      f"Próxima automática: {next_run()}")
+            n = len(cookies) if cookies else "?"
+            nxt = datetime.datetime.fromtimestamp(
+                os.path.getmtime(path) + self.cfg["days"] * 86400).strftime("%Y-%m-%d")
+            self.status.config(text=(f"Última extracción:  {fecha}   ({n} cookies)\n"
+                                     f"sessionKey:  {'✓ presente' if sk else '✗ falta'}\n"
+                                     f"Próxima estimada:  {nxt}"))
         else:
-            estado = "Sin backups todavía.\nDale a «Extraer ahora»."
-        self.status.config(text=estado)
+            self.status.config(text="Sin backups todavía.\nDale a «Extraer ahora».")
 
     def extract(self):
-        self.status.config(text="Extrayendo…"); self.root.update()
-        r = subprocess.run(["systemctl", "--user", "start", "claude-cookies"],
+        self.log.config(text="Extrayendo…"); self.root.update()
+        r = subprocess.run([PY, os.path.join(DIR, "extract.py")],
                            capture_output=True, text=True)
+        out = (r.stdout + r.stderr).strip().splitlines()
+        self.log.config(text=out[-1] if out else "Listo.")
         if r.returncode != 0:
-            messagebox.showerror("Error", r.stderr or "Falló la extracción")
+            messagebox.showerror("Error", r.stdout + r.stderr)
         self.refresh()
 
     def _copy(self, text, what):
@@ -110,31 +158,18 @@ class App:
             return
         self.root.clipboard_clear(); self.root.clipboard_append(text); self.root.update()
         messagebox.showinfo("Copiado", f"{what} en el portapapeles.\n"
-                            "Pégalo antes de cerrar esta ventana.")
+                            "Pégalo antes de cerrar la ventana.")
 
     def copy_sk(self):
-        _, cookies = latest()
-        self._copy(session_key(cookies) if cookies else None, "sessionKey")
+        _, cookies = latest(self.cfg)
+        self._copy(session_key(cookies), "sessionKey")
 
     def copy_json(self):
-        path, cookies = latest()
+        path, _ = latest(self.cfg)
         self._copy(open(path).read() if path else None, "JSON completo")
 
     def open_folder(self):
-        subprocess.Popen(["xdg-open", out_folder()])
-
-    def apply_days(self):
-        d = self.days.get()
-        try:
-            txt = open(TIMER).read()
-            txt = re.sub(r"OnUnitActiveSec=\d+d", f"OnUnitActiveSec={d}d", txt)
-            open(TIMER, "w").write(txt)
-            subprocess.run(["systemctl", "--user", "daemon-reload"])
-            subprocess.run(["systemctl", "--user", "restart", "claude-cookies.timer"])
-            messagebox.showinfo("Listo", f"Ahora corre cada {d} días.")
-            self.refresh()
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
+        open_path(out_folder(self.cfg))
 
 
 if __name__ == "__main__":

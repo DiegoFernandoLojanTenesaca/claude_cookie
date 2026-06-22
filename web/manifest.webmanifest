@@ -1,0 +1,13 @@
+{
+  "name": "Claude · Cookie Backup",
+  "short_name": "Claude Cookie",
+  "description": "Restaura tu sesión de claude.ai en cualquier dispositivo",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#1f1c1b",
+  "theme_color": "#2E2A28",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

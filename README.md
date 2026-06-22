@@ -26,7 +26,8 @@ Chrome (sesión claude.ai)
         ├─ rclone sync ──► Google Drive: gdrive:<nombre-pc>/   (rota a 3 por PC)
         └─ (opcional) POST ──► Google Sheet (Apps Script)
         ▲
-   systemd --user timer  (cada N días + ~5 min tras cada arranque)
+   agendador (systemd / launchd / Task Scheduler) corre diario;
+   extract.py --scheduled se auto-regula según "days" en config.json
 ```
 
 - **Solo `sessionKey` importa** para reabrir la sesión; los cookies de Cloudflare
@@ -55,35 +56,39 @@ Chrome (sesión claude.ai)
 
 ## Requisitos
 
-- Linux con `systemd` y sesión de usuario (KDE/GNOME).
-- **Chrome** (o Brave/Chromium/Edge/Firefox) con tu sesión de claude.ai abierta.
-- Python 3 con `tkinter` (para la GUI) — viene en la mayoría de distros.
-- KWallet/Keyring desbloqueado (Chrome cifra su clave de cookies ahí). Se recomienda
-  KWallet **con contraseña vacía** para que el timer no se trabe pidiéndola.
+- **Linux, Windows o macOS.**
+- **Chrome** (o Brave/Chromium/Edge/Opera/Vivaldi/Firefox) con tu sesión de claude.ai abierta.
+- Python 3 con `tkinter` (para la GUI) — incluido en los instaladores de Windows/macOS
+  y en la mayoría de distros Linux.
+- Keyring desbloqueado (el navegador cifra su clave de cookies ahí): KWallet/GNOME
+  Keyring en Linux, Keychain en macOS, DPAPI en Windows. En Linux se recomienda el
+  keyring **con contraseña vacía** para que el agendado no se trabe pidiéndola.
 
-`install.sh` instala lo demás (`browser_cookie3` y `rclone`).
+Los instaladores ponen lo demás (`browser_cookie3` y `rclone`).
 
 ---
 
 ## Instalación
 
-```bash
-bash install.sh
-```
+| Sistema | Comando |
+|---|---|
+| **Linux / macOS** | `bash install.sh` |
+| **Windows** | `powershell -ExecutionPolicy Bypass -File install.ps1` |
 
-Hace todo, idempotente (puedes repetirlo para reconfigurar):
+El instalador es idempotente (repítelo para reconfigurar) y hace todo:
 
-1. Instala `browser_cookie3` en tu Python.
-2. Instala `rclone` en `~/.local/bin` si falta.
-3. Si no existe el remoto `gdrive`, te dice el comando para autorizarlo:
-   ```bash
-   ~/.local/bin/rclone config
-   # remoto: gdrive | tipo: drive | scope: 1 | autorizar en el navegador
-   ```
-   (Eso necesita tu navegador una vez; luego re-corres `install.sh`.)
-4. Apunta el remoto a tu carpeta de Drive (`root_folder_id`).
-5. Pregunta cada cuántos días, cuántos backups conservar y (opcional) la URL del Sheet.
-6. Crea y activa el **timer** de systemd y el **lanzador** en el menú de apps.
+1. Instala `browser_cookie3` y `rclone`.
+2. Si no existe el remoto `gdrive`, te dice el `rclone config` para autorizarlo
+   (`tipo: drive · scope: 1 · autorizar en el navegador`). Eso necesita tu navegador
+   una vez; luego re-corres el instalador.
+3. Apunta el remoto a tu carpeta de Drive (pegas la URL o el ID; se guarda local).
+4. Pregunta cada cuántos días, cuántos backups conservar y (opcional) la URL del Sheet,
+   y escribe `config.json`.
+5. Registra el **agendado** (systemd/launchd/Task Scheduler) y un **acceso a la GUI**.
+
+Toda la configuración vive en un solo `config.json`
+(`~/.config/claude-cookie-backup/` o `%APPDATA%\claude-cookie-backup\`), que comparten
+el script, la GUI y el agendador.
 
 ---
 
@@ -95,27 +100,40 @@ Búscala en el menú como **«Claude · Cookie Backup»**, o:
 python3 gui.py
 ```
 Botones: **Extraer ahora**, **Copiar sessionKey**, **Copiar JSON completo**
-(para pegar en EditThisCookie), **Abrir carpeta**, y selector de intervalo
-**10 / 15 / 20 / 30 días**.
+(para pegar en EditThisCookie), **Abrir carpeta**, **selector de navegador**, y
+selectores de **intervalo** y **cuántos conservar** (se guardan en `config.json`).
 
 ### Línea de comandos
 ```bash
-systemctl --user start claude-cookies                # extraer YA, a demanda
-systemctl --user list-timers claude-cookies.timer    # ver próximo disparo
-journalctl --user -u claude-cookies -n 20            # ver el último resultado
-python3 extract.py --self-test                       # chequear la lógica
+python3 extract.py              # extraer YA (a demanda, en cualquier OS)
+python3 extract.py --scheduled  # lo que corre el agendador: salta si es muy reciente
+python3 extract.py --self-test  # chequear la lógica
+# ver el agendado: systemctl --user list-timers (Linux) · schtasks (Windows) · launchctl list (mac)
 ```
 
 ---
 
 ## Programación y reinicios
 
-- El timer está `enabled` → systemd lo recarga en **cada arranque**.
-- `OnBootSec=5min` → intenta una extracción ~5 min después de encender.
-- `OnUnitActiveSec=Nd` → además cada N días mientras la PC esté prendida.
-- Con `Linger=yes`, el *user manager* arranca al boot aunque no inicies sesión.
-- **Caveat inofensivo:** si una corrida cae con el KWallet aún bloqueado (antes de
-  iniciar sesión gráfica), aborta limpia y la siguiente sale bien. No se pierde nada.
+El agendador es **«tonto»** (corre seguido) y el script se **auto-regula**: con
+`--scheduled`, `extract.py` salta si el último backup es más nuevo que `days`. Así
+cambiar el intervalo es solo editar `config.json` — no hay que tocar el agendador.
+
+- **Linux (systemd --user):** timer diario + `OnBootSec=5min` (corre tras cada arranque);
+  `enabled`, sobrevive reinicios.
+- **macOS (launchd):** `RunAtLoad` (al iniciar sesión) + `StartInterval` 24 h.
+- **Windows (Task Scheduler):** disparadores *diario* + *al iniciar sesión*.
+- **Caveat inofensivo:** si una corrida cae con el keyring aún bloqueado (antes de
+  iniciar sesión), aborta limpia y la siguiente sale bien. No se pierde nada.
+
+---
+
+## Multiplataforma
+
+El motor (`extract.py`) y la GUI (`gui.py`) son los mismos en los tres sistemas
+(`browser_cookie3` descifra en Windows/DPAPI, macOS/Keychain y Linux/keyring; `rclone`
+es multiplataforma). Solo cambia el **agendador** y el **acceso directo**, que cada
+instalador resuelve por su sistema.
 
 ---
 
@@ -158,6 +176,23 @@ deja las 3 más nuevas.
 
 ---
 
+## App móvil (PWA)
+
+`web/` es una mini app (HTML estático, sin backend) para tener el cookie a mano en el
+móvil. **Pegas el JSON** del backup (lo abres desde Drive en el teléfono), y te da
+botón grande de **Copiar sessionKey** / **Copiar JSON completo**, muestra cuándo
+caduca, lo recuerda en el dispositivo (`localStorage`) y funciona offline. Se instala
+como icono ("Añadir a pantalla de inicio").
+
+Para publicarla: activa **GitHub Pages** sobre la carpeta `/web` (Settings → Pages), o
+ábrela local. No expone nada: el `sessionKey` nunca sale del teléfono.
+
+> Decisión de diseño: que el móvil *jale solo* el cookie exigiría una URL pública con
+> tu sesión = acceso total a la cuenta. Por eso es **pegar-y-copiar**, no auto-fetch.
+> El import de cookies en sí se hace en un navegador de escritorio con EditThisCookie.
+
+---
+
 ## Rotación
 
 Cada corrida escribe `claude-cookies-AAAA-MM-DD_HH-MM-SS.json` y borra los viejos
@@ -170,11 +205,16 @@ Drive de esa PC. El Sheet hace lo mismo con sus filas.
 
 | Archivo | Qué hace |
 |---|---|
-| `extract.py` | Lee cookies, arma el JSON (formato EditThisCookie), guarda local, rota, sube a Drive y/o al Sheet. Tiene `--self-test`. |
-| `gui.py` | Interfaz Tkinter (sin dependencias): extraer, copiar, abrir carpeta, cambiar intervalo. |
-| `install.sh` | Instalador todo-en-uno (deps + rclone + remoto + timer + lanzador). |
+| `extract.py` | Motor: lee cookies, arma el JSON (formato EditThisCookie), guarda local, rota, sube a Drive y/o al Sheet. `--scheduled` se auto-regula; `--self-test` chequea. |
+| `gui.py` | Interfaz Tkinter/ttk multiplataforma: extraer, copiar, navegador, intervalo, conservar. |
+| `install.sh` | Instalador Linux (systemd) y macOS (launchd). |
+| `install.ps1` | Instalador Windows (Task Scheduler + acceso directo). |
 | `sheet.gs` | Apps Script para el Google Sheet opcional. |
+| `web/` | Mini PWA para el móvil (pegar-y-copiar, offline, instalable). |
 | `out/` | Backups locales (ignorado por git). |
+
+Config (no versionada): `config.json` en `~/.config/claude-cookie-backup/` (o
+`%APPDATA%` en Windows).
 
 ---
 
@@ -186,18 +226,27 @@ Drive de esa PC. El Sheet hace lo mismo con sus filas.
   (`>1e11` ⇒ ms ⇒ /1000). Así el set es consistente y de una sola sesión.
 - Salida con `sort_keys=True` para igualar el orden de campos de EditThisCookie; las
   cookies de sesión omiten `expirationDate`.
-- El service usa `sys.executable` (no el shim de pyenv) para que systemd lo encuentre.
+- El agendado usa `sys.executable` (no el shim de pyenv) para que lo encuentre.
 - `rclone sync` por-PC usa `socket.gethostname()` como subcarpeta.
+- Config única en `config.json`; el agendador corre `extract.py --scheduled`, que salta
+  si el último backup tiene menos de `days` días (auto-regulación sin tocar el agendador).
 
 ---
 
 ## Reconfigurar / desinstalar
 
+Reconfigurar: vuelve a correr el instalador, o cambia los valores en la GUI / `config.json`.
+
 ```bash
-bash install.sh                                      # vuelve a preguntar todo
-systemctl --user disable --now claude-cookies.timer  # apagar
+# Linux
+systemctl --user disable --now claude-cookies.timer
 rm ~/.config/systemd/user/claude-cookies.{service,timer}
 rm ~/.local/share/applications/claude-cookie-backup.desktop
+# macOS
+launchctl unload ~/Library/LaunchAgents/com.claudecookies.backup.plist && \
+  rm ~/Library/LaunchAgents/com.claudecookies.backup.plist
+# Windows (PowerShell)
+Unregister-ScheduledTask -TaskName ClaudeCookieBackup -Confirm:$false
 ```
 
 ---

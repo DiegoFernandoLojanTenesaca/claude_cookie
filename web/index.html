@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2E2A28">
+<title>Claude · Cookie Backup</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  :root { --bg:#1f1c1b; --card:#2a2624; --line:#3a3431; --txt:#f2ece5; --mut:#a89e95;
+          --accent:#d97757; --ok:#6fae6f; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:var(--bg); color:var(--txt); padding:18px; max-width:520px; margin:auto; }
+  header { display:flex; align-items:center; gap:12px; margin:8px 0 18px; }
+  header img { width:46px; height:46px; }
+  header h1 { font-size:18px; margin:0; }
+  header p { margin:2px 0 0; font-size:12px; color:var(--mut); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px;
+          padding:16px; margin-bottom:14px; }
+  label { font-size:12px; color:var(--mut); display:block; margin-bottom:6px; }
+  textarea { width:100%; height:110px; resize:vertical; background:#171413; color:var(--txt);
+             border:1px solid var(--line); border-radius:10px; padding:10px; font:12px monospace; }
+  button { width:100%; border:0; border-radius:12px; padding:15px; font-size:15px; font-weight:600;
+           color:#fff; background:var(--accent); margin-top:10px; cursor:pointer; }
+  button.sec { background:#3a3431; }
+  .val { font:12px monospace; word-break:break-all; background:#171413; border:1px solid var(--line);
+         border-radius:10px; padding:10px; color:var(--mut); max-height:90px; overflow:auto; }
+  .row { display:flex; gap:8px; } .row button { margin-top:0; }
+  .meta { font-size:12px; color:var(--mut); margin:10px 0 0; }
+  .ok { color:var(--ok); } .warn { color:var(--accent); }
+  .hide { display:none; }
+  small { color:var(--mut); font-size:11px; line-height:1.5; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icon.svg" alt="">
+  <div><h1>Claude · Cookie Backup</h1><p>Restaura tu sesión en el móvil</p></div>
+</header>
+
+<div class="card" id="empty">
+  <label>Pega aquí el JSON del backup (ábrelo en Drive y copia todo)</label>
+  <textarea id="in" placeholder='[ { "name": "sessionKey", ... } ]'></textarea>
+  <button onclick="load()">Cargar</button>
+  <p class="meta"><small>Se guarda solo en este dispositivo (localStorage). Nada se sube
+  a ningún lado. El <b>sessionKey</b> = acceso a tu cuenta: no lo compartas.</small></p>
+</div>
+
+<div class="card hide" id="view">
+  <label>sessionKey <span id="exp" class="meta"></span></label>
+  <div class="val" id="sk"></div>
+  <button onclick="copy('sk')">Copiar sessionKey</button>
+  <div class="row" style="margin-top:10px">
+    <button class="sec" onclick="copy('json')">Copiar JSON completo</button>
+    <button class="sec" onclick="reset()">Pegar otro</button>
+  </div>
+  <p class="meta" id="status"></p>
+</div>
+
+<div class="card">
+  <small><b>Cómo usar:</b> en claude.ai con la extensión <b>EditThisCookie</b> →
+  Import → pega lo copiado → recarga. En el móvil sirve para tener el cookie a mano;
+  el import de cookies se hace en un navegador de escritorio.</small>
+</div>
+
+<script>
+let DATA = null;
+function $(id){ return document.getElementById(id); }
+function show(v){ $('empty').classList.toggle('hide', v); $('view').classList.toggle('hide', !v); }
+
+function render(json){
+  let arr;
+  try { arr = JSON.parse(json); } catch(e){ $('status').innerHTML='<span class="warn">JSON inválido.</span>'; return false; }
+  const sk = (arr.find && arr.find(c => c.name === 'sessionKey')) || null;
+  if(!sk){ $('status').innerHTML='<span class="warn">No hay sessionKey en ese JSON.</span>'; return false; }
+  DATA = { json, sk: sk.value };
+  $('sk').textContent = sk.value;
+  if(sk.expirationDate){
+    const d = new Date(sk.expirationDate*1000);
+    const days = Math.round((d - Date.now())/86400000);
+    $('exp').textContent = '· expira ' + d.toISOString().slice(0,10) + ' (' + days + 'd)';
+  } else $('exp').textContent='';
+  localStorage.setItem('cc_json', json);
+  show(true);
+  return true;
+}
+function load(){ if(render($('in').value.trim())) $('status').textContent=''; }
+function reset(){ show(false); $('in').value=''; }
+async function copy(which){
+  const t = which === 'sk' ? DATA.sk : DATA.json;
+  try { await navigator.clipboard.writeText(t); $('status').innerHTML='<span class="ok">✓ Copiado al portapapeles.</span>'; }
+  catch(e){
+    const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+    $('status').innerHTML='<span class="ok">✓ Copiado.</span>';
+  }
+}
+const saved = localStorage.getItem('cc_json');
+if(saved) render(saved);
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

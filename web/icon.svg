@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="claude-cookie-backup">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E8896B"/>
+      <stop offset="1" stop-color="#C5613F"/>
+    </linearGradient>
+    <radialGradient id="cookie" cx="0.4" cy="0.35" r="0.85">
+      <stop offset="0" stop-color="#F2DEB6"/>
+      <stop offset="1" stop-color="#D9B481"/>
+    </radialGradient>
+    <mask id="bite">
+      <rect width="256" height="256" fill="#fff"/>
+      <circle cx="176" cy="80" r="32" fill="#000"/>
+    </mask>
+  </defs>
+
+  <rect x="8" y="8" width="240" height="240" rx="54" fill="url(#bg)"/>
+
+  <!-- galleta con mordida -->
+  <g mask="url(#bite)">
+    <circle cx="118" cy="130" r="74" fill="url(#cookie)" stroke="#B98C56" stroke-width="3"/>
+  </g>
+
+  <!-- chips -->
+  <g fill="#5A3A22">
+    <circle cx="94"  cy="106" r="9"/>
+    <circle cx="138" cy="134" r="8"/>
+    <circle cx="102" cy="160" r="10"/>
+    <circle cx="150" cy="98"  r="6"/>
+    <circle cx="82"  cy="136" r="6"/>
+    <circle cx="126" cy="168" r="6"/>
+  </g>
+
+  <!-- badge de respaldo: flecha hacia arriba -->
+  <g transform="translate(150,150)">
+    <circle cx="34" cy="34" r="35" fill="#2E2A28"/>
+    <circle cx="34" cy="34" r="35" fill="none" stroke="#F2DEB6" stroke-width="2" opacity="0.5"/>
+    <path d="M34 18 L47 33 H40 V50 H28 V33 H21 Z" fill="#F7F4EE"/>
+  </g>
+</svg>
